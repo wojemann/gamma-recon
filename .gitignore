@@ -216,3 +216,10 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Project outputs/artifacts
+**/outputs/**
+!**/outputs/
+!**/outputs/**/*.png
+**/checkpoints/**
+**/processed/**

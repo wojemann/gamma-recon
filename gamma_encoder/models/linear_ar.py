@@ -26,6 +26,16 @@ no cross-channel coupling. So at step zero the model already produces
 target-shaped output (1-sample-delayed copy), which is the floor any
 loss has to improve upon. Cross-channel coupling has to be learned
 from gradient signal.
+
+Channel masking: ``mask_channels`` is accepted in ``forward`` for
+interface parity with the transformer model but is intentionally a
+no-op. Zero-filling the AR's input at masked channels would corrupt
+system identification — the conv would fit cross-channel coefficients
+against synthetic zeros instead of the true joint process. Instead,
+the AR runs unmasked and the caller scores on whichever channels the
+masking protocol calls out (so the AR's own self-history floor is
+included in the baseline; that's the canonical thing the transformer
+must beat).
 """
 
 from __future__ import annotations
@@ -61,6 +71,16 @@ class LinearVARModel(nn.Module):
         region_ids: torch.Tensor | None = None,
         mask_channels: torch.Tensor | None = None,
     ) -> torch.Tensor:
+        # ``mask_channels`` is accepted for interface parity with the
+        # transformer model but is intentionally ignored. Zero-filling
+        # the AR's input at masked channels would corrupt system
+        # identification: the conv would fit cross-channel coefficients
+        # against synthetic zeros instead of the true joint process.
+        # Instead, the AR runs unmasked here and the caller scores on
+        # whichever channels the masking protocol calls out (so the
+        # baseline includes the channel's own AR self-history floor —
+        # the canonical thing the transformer must beat).
+        del mask_channels  # explicit no-op
         if signal.dim() != 3:
             raise ValueError(f"expected (B, C, T), got {tuple(signal.shape)}")
         if signal.shape[1] != self.num_channels:
@@ -68,14 +88,6 @@ class LinearVARModel(nn.Module):
                 f"expected {self.num_channels} channels, got {signal.shape[1]}"
             )
         B, C, T = signal.shape
-        if mask_channels is not None:
-            if mask_channels.shape != (B, C):
-                raise ValueError(
-                    f"mask_channels shape {tuple(mask_channels.shape)} "
-                    f"!= expected (B, C) = ({B}, {C})"
-                )
-            keep = (~mask_channels.bool()).to(signal.dtype).to(signal.device)
-            signal = signal * keep[:, :, None]
         padded = F.pad(signal, (self.order, 0))     # (B, C, T+order)
         out = self.conv(padded)                     # (B, C, T+1)
         return out[..., :T]

@@ -8,12 +8,17 @@ encoder must predict them from cross-channel context. Tests verify:
      transformer model: changing the masked channel's signal must NOT
      change the recon at any output position. (The encoder never sees
      them.)
-  3. Masked channels' inputs do not influence the LinearVAR model
-     either — masked rows are zeroed before the conv.
-  4. A boolean mask of the wrong shape is rejected.
-  5. Loss-only-on-masked path: the harness's masked branch should drive
+  3. A boolean mask of the wrong shape is rejected (transformer).
+  4. Loss-only-on-masked path: the harness's masked branch should drive
      loss down on a tiny synthetic batch where masked channels are
      predictable from unmasked ones.
+
+The LinearVAR baseline ignores ``mask_channels`` on purpose — see
+``gamma_encoder/models/linear_ar.py``. Zero-filling AR inputs would
+corrupt system ID, so the AR runs unmasked and the caller scores
+on the masked-channel positions only. That means the AR baseline
+includes its own AR-self-history floor, which is the canonical thing
+a cross-channel model must beat.
 """
 
 from __future__ import annotations
@@ -86,8 +91,14 @@ def test_transformer_masked_channel_input_has_no_effect():
     assert delta < 1e-5, f"masked channel content leaked: max |Δrecon|={delta}"
 
 
-def test_linear_var_masked_channel_input_has_no_effect():
-    """Same property for the MVAR baseline."""
+def test_linear_var_ignores_mask_channels():
+    """LinearVAR must produce the SAME output regardless of mask_channels.
+
+    The AR baseline runs unmasked on principle (zeroing inputs would
+    corrupt cross-channel coefficient fitting). Passing a mask should
+    be a no-op at the model level — the caller is responsible for
+    scoring on masked positions.
+    """
     torch.manual_seed(0)
     B, C, T = 1, 4, 256
     model = LinearVARModel(num_channels=C, order=3)
@@ -99,12 +110,9 @@ def test_linear_var_masked_channel_input_has_no_effect():
     mask = torch.zeros(B, C, dtype=torch.bool)
     mask[0, 1] = True
     with torch.no_grad():
-        y_base = model(x, mask_channels=mask)
-        x_pert = x.clone()
-        x_pert[0, 1] += 5.0
-        y_pert = model(x_pert, mask_channels=mask)
-    delta = (y_base - y_pert).abs().max().item()
-    assert delta < 1e-6, f"masked channel content leaked into VAR output: {delta}"
+        y_unmasked = model(x)
+        y_masked = model(x, mask_channels=mask)
+    assert torch.allclose(y_unmasked, y_masked)
 
 
 def test_transformer_unmasked_channels_still_drive_output():

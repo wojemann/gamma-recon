@@ -92,18 +92,21 @@ sliced off so the recon shape matches the input.
 ## Channel-masked pretraining
 
 As of the channel-masking pivot, training masks `k=4` of 8 channels
-per segment per step. The MVAR forward zero-fills masked channels'
-inputs before the conv, so the prediction for any output channel is
-purely a function of the unmasked channels' lagged values plus the
-bias. The harness slices the loss to the masked channels' outputs
-only — that's the supervision signal.
+per segment per step. The MVAR's `mask_channels` argument is a
+**no-op** — zero-filling the AR's input would corrupt cross-channel
+coefficient fitting (the conv would learn to predict against
+synthetic zeros instead of the true joint process), so the AR runs
+unmasked. The harness slices the loss to the masked channels'
+outputs only — that's the supervision signal.
 
-What this probes specifically: **the off-diagonal entries of `W`**.
-Identity-shift init has zero off-diagonals, so the masked-channel
-prediction at step 0 is just the bias (≈ 0). Driving the masked
-loss down requires learning non-zero `W[masked_c, unmasked_c', k]`
-that capture cross-channel temporal coupling. So masked-channel MVAR
-is a clean probe of "did the model learn cross-channel structure."
+What this means for the baseline: the MVAR's prediction at a masked
+channel uses **all** lagged inputs, including that channel's own
+past. That's the canonical AR-self-history floor (`y[c,t] ≈
+x[c,t-1]` from the identity init). The transformer, which never
+sees masked channels' inputs at all, must beat this floor purely
+from cross-channel context. Apples-to-oranges by design — the
+question we're asking is "can a cross-channel-only model match a
+baseline that includes self-history?"
 
 ## How it gets trained
 

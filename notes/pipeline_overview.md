@@ -108,9 +108,12 @@ y[c, t] = b[c] + Σ_{c'} Σ_{k=1..p} W[c, c', k] * x[c', t-k]
   zero the model implements `y[c, t] = x[c, t-1]` per channel — each
   channel is a 1-sample-delayed copy of itself, no cross-coupling. Off-
   diagonal coupling has to be learned from gradient signal.
-- **Channel masking.** If `mask_channels` is passed, masked input rows
-  are zero-filled before the conv, so masked channels cannot leak into
-  the prediction.
+- **Channel masking.** `mask_channels` is accepted for interface parity
+  but is a no-op. Zero-filling the AR's input would corrupt system
+  identification (the conv fits coefficients against synthetic zeros).
+  The AR runs unmasked; the caller scores on the masked-channel
+  positions only. The AR's own self-history is included in the
+  baseline — that's the canonical AR-1 floor.
 
 Why MVAR rather than per-channel AR: it is the smallest linear, strictly
 causal model that has the same input access pattern as the transformer's

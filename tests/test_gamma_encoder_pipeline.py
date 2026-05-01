@@ -52,7 +52,12 @@ def test_full_model_forward_shape():
     assert out.shape == sig.shape
 
 
-def test_full_model_grad_flows():
+def test_full_model_grad_flows_unmasked():
+    """Unmasked forward: every param EXCEPT mask_token gets a gradient.
+
+    mask_token is only consumed when mask_channels is provided — see
+    test_full_model_grad_flows_masked for the full-coverage version.
+    """
     model, cfg = _make_model()
     B, C = 2, 3
     T = cfg.patch_samples * 4
@@ -61,8 +66,33 @@ def test_full_model_grad_flows():
     out = model(sig, region_ids)
     loss = MSELoss()(out, sig)
     loss.backward()
-    has_grad = [p.grad is not None and p.grad.abs().sum() > 0 for p in model.parameters()]
-    assert all(has_grad), "some params received no gradient"
+    missing = [
+        n for n, p in model.named_parameters()
+        if n != "mask_token" and (p.grad is None or p.grad.abs().sum() == 0)
+    ]
+    assert missing == [], f"params with no gradient: {missing}"
+    # And mask_token should be untouched on this path.
+    assert (model.mask_token.grad is None
+            or model.mask_token.grad.abs().sum() == 0)
+
+
+def test_full_model_grad_flows_masked():
+    """Masked forward exercises every parameter, including mask_token."""
+    model, cfg = _make_model()
+    B, C = 2, 3
+    T = cfg.patch_samples * 4
+    sig = torch.randn(B, C, T, requires_grad=False)
+    region_ids = torch.randint(0, cfg.num_regions, (C,))
+    mask_channels = torch.zeros(B, C, dtype=torch.bool)
+    mask_channels[:, 0] = True  # mask channel 0 in every batch item
+    out = model(sig, region_ids, mask_channels=mask_channels)
+    loss = MSELoss()(out, sig)
+    loss.backward()
+    missing = [
+        n for n, p in model.named_parameters()
+        if p.grad is None or p.grad.abs().sum() == 0
+    ]
+    assert missing == [], f"params with no gradient: {missing}"
 
 
 def test_model_can_overfit_one_segment():

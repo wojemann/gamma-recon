@@ -1,0 +1,545 @@
+{
+  "subject_id": 2,
+  "fs": 2048,
+  "segment_samples": 6144,
+  "seeds": {
+    "pretrain_split": 42,
+    "main_split": 42
+  },
+  "session_role_map": {
+    "0": "pretrain",
+    "1": "pretrain",
+    "2": "pretrain",
+    "3": "pretrain",
+    "4": "pretrain",
+    "5": "downstream_val",
+    "6": "downstream_test"
+  },
+  "schemes": [
+    "pretrain",
+    "main"
+  ],
+  "tasks_main": [
+    "sentence_onset",
+    "speech_nonspeech",
+    "volume",
+    "optical_flow"
+  ],
+  "optical_flow_column": "max_global_magnitude",
+  "trials": {
+    "trial000": {
+      "movie": "venom",
+      "movie_title": "venom",
+      "session_role": "pretrain",
+      "valid_window": [
+        3271010,
+        16468596
+      ],
+      "valid_duration_s": 6444.1337890625,
+      "n_words": 7937,
+      "n_sentence_onsets": 1374,
+      "counts": {
+        "pretrain": {
+          "total": 2148,
+          "train": 1718,
+          "valid": 215,
+          "test": 215
+        },
+        "sentence_onset": {
+          "n_pos_candidates_in_bounds": 1316,
+          "n_pos_after_overlap_prune": 679,
+          "n_neg_after_overlap_prune": 866,
+          "n_pos_after_balance": 679,
+          "n_neg_after_balance": 679,
+          "split_train": 1086,
+          "split_valid": 136,
+          "split_test": 136,
+          "total": 1358
+        },
+        "speech_nonspeech": {
+          "n_pos_candidates_in_bounds": 7140,
+          "n_pos_after_overlap_prune": 894,
+          "n_neg_after_overlap_prune": 865,
+          "n_pos_after_balance": 865,
+          "n_neg_after_balance": 865,
+          "split_train": 1384,
+          "split_valid": 173,
+          "split_test": 173,
+          "total": 1730
+        },
+        "volume": {
+          "n_pos_candidates_in_bounds": 3589,
+          "n_pos_after_overlap_prune": 732,
+          "n_neg_after_overlap_prune": 881,
+          "n_pos_after_balance": 732,
+          "n_neg_after_balance": 732,
+          "split_train": 1171,
+          "split_valid": 146,
+          "split_test": 147,
+          "total": 1464,
+          "n_words_total": 7937,
+          "n_words_top_or_bottom_quartile": 3714
+        },
+        "optical_flow": {
+          "n_pos_candidates_in_bounds": 3558,
+          "n_pos_after_overlap_prune": 646,
+          "n_neg_after_overlap_prune": 902,
+          "n_pos_after_balance": 646,
+          "n_neg_after_balance": 646,
+          "split_train": 1034,
+          "split_valid": 129,
+          "split_test": 129,
+          "total": 1292,
+          "n_words_total": 7937,
+          "n_words_top_or_bottom_quartile": 3714
+        }
+      }
+    },
+    "trial001": {
+      "movie": "spider-man-3-homecoming",
+      "movie_title": "Spiderman Homecoming",
+      "session_role": "pretrain",
+      "valid_window": [
+        887454,
+        17228088
+      ],
+      "valid_duration_s": 7978.8251953125,
+      "n_words": 12295,
+      "n_sentence_onsets": 2187,
+      "counts": {
+        "pretrain": {
+          "total": 2659,
+          "train": 2127,
+          "valid": 266,
+          "test": 266
+        },
+        "sentence_onset": {
+          "n_pos_candidates_in_bounds": 2168,
+          "n_pos_after_overlap_prune": 1059,
+          "n_neg_after_overlap_prune": 763,
+          "n_pos_after_balance": 763,
+          "n_neg_after_balance": 763,
+          "split_train": 1221,
+          "split_valid": 153,
+          "split_test": 152,
+          "total": 1526
+        },
+        "speech_nonspeech": {
+          "n_pos_candidates_in_bounds": 11359,
+          "n_pos_after_overlap_prune": 1316,
+          "n_neg_after_overlap_prune": 755,
+          "n_pos_after_balance": 755,
+          "n_neg_after_balance": 755,
+          "split_train": 1208,
+          "split_valid": 151,
+          "split_test": 151,
+          "total": 1510
+        },
+        "volume": {
+          "n_pos_candidates_in_bounds": 5705,
+          "n_pos_after_overlap_prune": 1092,
+          "n_neg_after_overlap_prune": 774,
+          "n_pos_after_balance": 774,
+          "n_neg_after_balance": 774,
+          "split_train": 1238,
+          "split_valid": 155,
+          "split_test": 155,
+          "total": 1548,
+          "n_words_total": 12295,
+          "n_words_top_or_bottom_quartile": 5752
+        },
+        "optical_flow": {
+          "n_pos_candidates_in_bounds": 5673,
+          "n_pos_after_overlap_prune": 960,
+          "n_neg_after_overlap_prune": 801,
+          "n_pos_after_balance": 801,
+          "n_neg_after_balance": 801,
+          "split_train": 1282,
+          "split_valid": 160,
+          "split_test": 160,
+          "total": 1602,
+          "n_words_total": 12295,
+          "n_words_top_or_bottom_quartile": 5752
+        }
+      }
+    },
+    "trial002": {
+      "movie": "guardians-of-the-galaxy",
+      "movie_title": "Guardians Of the Galaxy",
+      "session_role": "pretrain",
+      "valid_window": [
+        1241971,
+        17168981
+      ],
+      "valid_duration_s": 7776.8603515625,
+      "n_words": 8295,
+      "n_sentence_onsets": 1172,
+      "counts": {
+        "pretrain": {
+          "total": 2592,
+          "train": 2074,
+          "valid": 259,
+          "test": 259
+        },
+        "sentence_onset": {
+          "n_pos_candidates_in_bounds": 1161,
+          "n_pos_after_overlap_prune": 716,
+          "n_neg_after_overlap_prune": 1194,
+          "n_pos_after_balance": 716,
+          "n_neg_after_balance": 716,
+          "split_train": 1146,
+          "split_valid": 143,
+          "split_test": 143,
+          "total": 1432
+        },
+        "speech_nonspeech": {
+          "n_pos_candidates_in_bounds": 7816,
+          "n_pos_after_overlap_prune": 1021,
+          "n_neg_after_overlap_prune": 1185,
+          "n_pos_after_balance": 1021,
+          "n_neg_after_balance": 1021,
+          "split_train": 1634,
+          "split_valid": 204,
+          "split_test": 204,
+          "total": 2042
+        },
+        "volume": {
+          "n_pos_candidates_in_bounds": 3903,
+          "n_pos_after_overlap_prune": 842,
+          "n_neg_after_overlap_prune": 1210,
+          "n_pos_after_balance": 842,
+          "n_neg_after_balance": 842,
+          "split_train": 1347,
+          "split_valid": 168,
+          "split_test": 169,
+          "total": 1684,
+          "n_words_total": 8295,
+          "n_words_top_or_bottom_quartile": 3918
+        },
+        "optical_flow": {
+          "n_pos_candidates_in_bounds": 3913,
+          "n_pos_after_overlap_prune": 752,
+          "n_neg_after_overlap_prune": 1227,
+          "n_pos_after_balance": 752,
+          "n_neg_after_balance": 752,
+          "split_train": 1203,
+          "split_valid": 150,
+          "split_test": 151,
+          "total": 1504,
+          "n_words_total": 8295,
+          "n_words_top_or_bottom_quartile": 3920
+        }
+      }
+    },
+    "trial003": {
+      "movie": "guardians-of-the-galaxy-2",
+      "movie_title": "Guardians Of The Galaxy 2",
+      "session_role": "pretrain",
+      "valid_window": [
+        1292149,
+        21229117
+      ],
+      "valid_duration_s": 9734.84765625,
+      "n_words": 9405,
+      "n_sentence_onsets": 1289,
+      "counts": {
+        "pretrain": {
+          "total": 3244,
+          "train": 2595,
+          "valid": 324,
+          "test": 325
+        },
+        "sentence_onset": {
+          "n_pos_candidates_in_bounds": 1250,
+          "n_pos_after_overlap_prune": 792,
+          "n_neg_after_overlap_prune": 1605,
+          "n_pos_after_balance": 792,
+          "n_neg_after_balance": 792,
+          "split_train": 1267,
+          "split_valid": 158,
+          "split_test": 159,
+          "total": 1584
+        },
+        "speech_nonspeech": {
+          "n_pos_candidates_in_bounds": 8648,
+          "n_pos_after_overlap_prune": 1151,
+          "n_neg_after_overlap_prune": 1596,
+          "n_pos_after_balance": 1151,
+          "n_neg_after_balance": 1151,
+          "split_train": 1842,
+          "split_valid": 230,
+          "split_test": 230,
+          "total": 2302
+        },
+        "volume": {
+          "n_pos_candidates_in_bounds": 4385,
+          "n_pos_after_overlap_prune": 906,
+          "n_neg_after_overlap_prune": 1634,
+          "n_pos_after_balance": 906,
+          "n_neg_after_balance": 906,
+          "split_train": 1450,
+          "split_valid": 181,
+          "split_test": 181,
+          "total": 1812,
+          "n_words_total": 9405,
+          "n_words_top_or_bottom_quartile": 4426
+        },
+        "optical_flow": {
+          "n_pos_candidates_in_bounds": 4289,
+          "n_pos_after_overlap_prune": 812,
+          "n_neg_after_overlap_prune": 1648,
+          "n_pos_after_balance": 812,
+          "n_neg_after_balance": 812,
+          "split_train": 1299,
+          "split_valid": 162,
+          "split_test": 163,
+          "total": 1624,
+          "n_words_total": 9405,
+          "n_words_top_or_bottom_quartile": 4427
+        }
+      }
+    },
+    "trial004": {
+      "movie": "avengers-infinity-war",
+      "movie_title": "Avengers Infinity War",
+      "session_role": "pretrain",
+      "valid_window": [
+        803330,
+        23456800
+      ],
+      "valid_duration_s": 11061.2646484375,
+      "n_words": 8529,
+      "n_sentence_onsets": 1522,
+      "counts": {
+        "pretrain": {
+          "total": 3687,
+          "train": 2950,
+          "valid": 369,
+          "test": 368
+        },
+        "sentence_onset": {
+          "n_pos_candidates_in_bounds": 1496,
+          "n_pos_after_overlap_prune": 892,
+          "n_neg_after_overlap_prune": 1414,
+          "n_pos_after_balance": 892,
+          "n_neg_after_balance": 892,
+          "split_train": 1427,
+          "split_valid": 178,
+          "split_test": 179,
+          "total": 1784
+        },
+        "speech_nonspeech": {
+          "n_pos_candidates_in_bounds": 7921,
+          "n_pos_after_overlap_prune": 1154,
+          "n_neg_after_overlap_prune": 1396,
+          "n_pos_after_balance": 1154,
+          "n_neg_after_balance": 1154,
+          "split_train": 1846,
+          "split_valid": 231,
+          "split_test": 231,
+          "total": 2308
+        },
+        "volume": {
+          "n_pos_candidates_in_bounds": 3971,
+          "n_pos_after_overlap_prune": 935,
+          "n_neg_after_overlap_prune": 1450,
+          "n_pos_after_balance": 935,
+          "n_neg_after_balance": 935,
+          "split_train": 1496,
+          "split_valid": 187,
+          "split_test": 187,
+          "total": 1870,
+          "n_words_total": 8529,
+          "n_words_top_or_bottom_quartile": 3990
+        },
+        "optical_flow": {
+          "n_pos_candidates_in_bounds": 3949,
+          "n_pos_after_overlap_prune": 809,
+          "n_neg_after_overlap_prune": 1459,
+          "n_pos_after_balance": 809,
+          "n_neg_after_balance": 809,
+          "split_train": 1294,
+          "split_valid": 162,
+          "split_test": 162,
+          "total": 1618,
+          "n_words_total": 8529,
+          "n_words_top_or_bottom_quartile": 3991
+        }
+      }
+    },
+    "trial005": {
+      "movie": "black-panther",
+      "movie_title": "Black Panther",
+      "session_role": "downstream_val",
+      "valid_window": [
+        875375,
+        13152507
+      ],
+      "valid_duration_s": 5994.693359375,
+      "n_words": 7580,
+      "n_sentence_onsets": 1255,
+      "counts": {
+        "pretrain": {
+          "total": 1998,
+          "train": 1598,
+          "valid": 200,
+          "test": 200
+        },
+        "sentence_onset": {
+          "n_pos_candidates_in_bounds": 872,
+          "n_pos_after_overlap_prune": 553,
+          "n_neg_after_overlap_prune": 897,
+          "n_pos_after_balance": 553,
+          "n_neg_after_balance": 553,
+          "split_train": 885,
+          "split_valid": 111,
+          "split_test": 110,
+          "total": 1106
+        },
+        "speech_nonspeech": {
+          "n_pos_candidates_in_bounds": 5124,
+          "n_pos_after_overlap_prune": 749,
+          "n_neg_after_overlap_prune": 884,
+          "n_pos_after_balance": 749,
+          "n_neg_after_balance": 749,
+          "split_train": 1198,
+          "split_valid": 150,
+          "split_test": 150,
+          "total": 1498
+        },
+        "volume": {
+          "n_pos_candidates_in_bounds": 2429,
+          "n_pos_after_overlap_prune": 603,
+          "n_neg_after_overlap_prune": 910,
+          "n_pos_after_balance": 603,
+          "n_neg_after_balance": 603,
+          "split_train": 965,
+          "split_valid": 121,
+          "split_test": 120,
+          "total": 1206,
+          "n_words_total": 7580,
+          "n_words_top_or_bottom_quartile": 3636
+        },
+        "optical_flow": {
+          "n_pos_candidates_in_bounds": 2429,
+          "n_pos_after_overlap_prune": 525,
+          "n_neg_after_overlap_prune": 922,
+          "n_pos_after_balance": 525,
+          "n_neg_after_balance": 525,
+          "split_train": 840,
+          "split_valid": 105,
+          "split_test": 105,
+          "total": 1050,
+          "n_words_total": 7580,
+          "n_words_top_or_bottom_quartile": 3636
+        }
+      }
+    },
+    "trial006": {
+      "movie": "aquaman",
+      "movie_title": "Aquaman",
+      "session_role": "downstream_test",
+      "valid_window": [
+        891855,
+        23586770
+      ],
+      "valid_duration_s": 11081.50146484375,
+      "n_words": 7233,
+      "n_sentence_onsets": 1055,
+      "counts": {
+        "pretrain": {
+          "total": 3693,
+          "train": 2954,
+          "valid": 369,
+          "test": 370
+        },
+        "sentence_onset": {
+          "n_pos_candidates_in_bounds": 1033,
+          "n_pos_after_overlap_prune": 650,
+          "n_neg_after_overlap_prune": 2370,
+          "n_pos_after_balance": 650,
+          "n_neg_after_balance": 650,
+          "split_train": 1040,
+          "split_valid": 130,
+          "split_test": 130,
+          "total": 1300
+        },
+        "speech_nonspeech": {
+          "n_pos_candidates_in_bounds": 6752,
+          "n_pos_after_overlap_prune": 936,
+          "n_neg_after_overlap_prune": 2360,
+          "n_pos_after_balance": 936,
+          "n_neg_after_balance": 936,
+          "split_train": 1498,
+          "split_valid": 187,
+          "split_test": 187,
+          "total": 1872
+        },
+        "volume": {
+          "n_pos_candidates_in_bounds": 3388,
+          "n_pos_after_overlap_prune": 720,
+          "n_neg_after_overlap_prune": 2394,
+          "n_pos_after_balance": 720,
+          "n_neg_after_balance": 720,
+          "split_train": 1152,
+          "split_valid": 144,
+          "split_test": 144,
+          "total": 1440,
+          "n_words_total": 7233,
+          "n_words_top_or_bottom_quartile": 3436
+        },
+        "optical_flow": {
+          "n_pos_candidates_in_bounds": 3346,
+          "n_pos_after_overlap_prune": 660,
+          "n_neg_after_overlap_prune": 2411,
+          "n_pos_after_balance": 660,
+          "n_neg_after_balance": 660,
+          "split_train": 1056,
+          "split_valid": 132,
+          "split_test": 132,
+          "total": 1320,
+          "n_words_total": 7233,
+          "n_words_top_or_bottom_quartile": 3436
+        }
+      }
+    }
+  },
+  "table6_sanity": {
+    "sentence_onset": {
+      "expected_table6": {
+        "train": 1036,
+        "valid": 129,
+        "test": 129
+      },
+      "got_trial006": {
+        "train": 1040,
+        "valid": 130,
+        "test": 130
+      }
+    },
+    "speech_nonspeech": {
+      "expected_table6": {
+        "train": 1470,
+        "valid": 183,
+        "test": 183
+      },
+      "got_trial006": {
+        "train": 1498,
+        "valid": 187,
+        "test": 187
+      }
+    },
+    "channel_recon": {
+      "expected_table6": {
+        "train": 3385,
+        "valid": 422,
+        "test": 422
+      },
+      "got_trial006_pretrain": {
+        "train": 2954,
+        "valid": 369,
+        "test": 370
+      }
+    }
+  }
+}

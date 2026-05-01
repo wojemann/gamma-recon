@@ -12,6 +12,7 @@ dependencies = [
     "scipy>=1.10",
     "h5py>=3.8",
     "pandas>=2.0",
+    "pyarrow>=14",
     "torch>=2.1",
 ]
 

@@ -558,30 +558,79 @@ Subject 2. Diff before reporting reproduction numbers.
 
 ### Where to pick up next
 
-Items 1–3 (overfit to convergence, wire next loss, wire next tokenizer)
-are done as of the 2026-04-30 sweep. Updated priority order:
+Laptop-stage work that's been completed (so future sessions don't
+re-do it): full 1000-step overfit sweep across 10 losses × 6
+tokenizers; band-resolved NMSE evaluation on the saved sweep
+checkpoints (`results/overfit_runs/band_eval.csv` plus three heatmap
+PNGs in the same dir); faithful BaRISTA encoder stack (RoPE +
+RMSNorm + SwiGLU) at `gamma_encoder/models/faithful.py`; channel-
+and region-masked pretraining paths; segment-index parquets for
+sub_2 (see "Pre-computed segment indices" section below);
+parquet→h5→faithful-encoder integration smoke
+(`scripts/index_dataloader_smoke.py`); index round-trip alignment
+check (`scripts/check_index_alignment.py`).
 
-1. **`gamma_eval` band-resolved NMSE on the overfit batch** for a few
-   of the converged checkpoints. This is the first signal of whether
-   any of these losses actually move high-gamma NMSE downward on real
-   data; convergence-speed on the cached batch can't tell us that.
-   Until this is in hand, none of this approaches the server.
-2. **Fix `whitened_mse` PSD handling** before it's included in any
-   cross-loss comparison. Estimate PSD once on training data and
-   freeze it; the on-the-fly path produces uninterpretable
-   initial-loss scales (~4e9).
-3. **One retry of `log_power_spectral` at `lr=3e-4`** before drawing
-   conclusions about its convergence behavior. `lr=1e-3` plateaus
-   around 1.0 with mild oscillation from step ~300 onward.
-4. **Tiny notebook to plot `metrics.jsonl` curves side-by-side.**
-   `comparison_loss_axis.png` / `comparison_tokenizer_axis.png` exist
-   from the sweep but a notebook makes incremental additions easier.
-   `pd.read_json(..., lines=True)` is enough — no plotting infra
-   needed yet.
+Open laptop-stage TODOs (cheap, do before server hand-off):
 
-Everything beyond #4 (sweep harness, faithful BaRISTA stack, masked
-reconstruction, streaming loader, Subject 2 full-session pretraining)
-is server-side work and shouldn't be attempted on the M5.
+1. **Fix `whitened_mse` PSD handling.** Currently it estimates PSD
+   on-the-fly per batch with no floor, producing initial-loss
+   scales ~4e9 and making any cross-loss comparison meaningless.
+   `scripts/cache_whitened_mse_psd.py` exists but the loss path
+   doesn't yet load it. Wire it up; freeze PSD estimated on
+   sub_2 pretrain segments. The
+   `tests/test_server_readiness.py::test_whitened_mse_psd_floor_*`
+   tests pin the eps-floor contract.
+2. **`log_power_spectral` retry at `lr=3e-4`** before drawing
+   conclusions; `lr=1e-3` plateaued around 1.0 with mild oscillation.
+
+### Server-day-1 punch list (read this on the server before launching anything)
+
+The server agent will have access to two A40s and the BrainTreebank
+data at `/mnt/sauce/littlab/users/wojemann/BrainTree/`. Sequence:
+
+1. **Environment.** `pip install -e .` in the gamma-recon repo.
+   `pyarrow` is now in `pyproject.toml` deps (the parquet loader
+   needs it). If the server already has a stale env, force-reinstall
+   pyarrow before reading any segment-index parquet.
+2. **Smoke tests.** `pytest tests/test_server_readiness.py -v`
+   should report 7 always-on passes plus 5 CUDA-only and 1 multi-GPU
+   test now becoming active. The streaming-dataset and pretrain-
+   entrypoint skips remain until those modules land — see #5.
+3. **Per-trial preprocessing pass.** The current `BrainTreeTrial`
+   loader notch-filters and Laplacian-rerefs the **whole** trial in
+   memory (good — segments inherit clean filter context). For
+   server-side training, write that preprocessed array to disk once
+   per trial (e.g., as a `.npy` or h5) and have the streaming
+   dataset map `(trial, start_sample) → (preprocessed[trial][start_sample : start_sample+6144])`.
+   Don't preprocess per-segment — the 6-tap notch chain produces
+   edge artifacts on 3-s windows.
+4. **Re-estimate the whitened-MSE PSD on real data** using
+   `scripts/cache_whitened_mse_psd.py`. Save the PSD tensor next to
+   the preprocessed cache; the loss must read it from disk, not
+   estimate on-the-fly.
+5. **Build the streaming dataset and pretrain entrypoint.** Targets:
+   `gamma_encoder/data/dataset.py::BrainTreebankDataset` (yields
+   `(segments, region_ids)` per item, indexed by parquet rows) and
+   `gamma_encoder/training/pretrain.py::run_pretrain`. The
+   server-readiness test file documents the expected interfaces.
+6. **Run the loss ablation.** 10 losses × default tokenizer
+   (`dilated_cnn`) × all 7 sub_2 trials' pretrain segments. Each
+   run must clip gradients (`clip_grad_norm_(1.0)`) and use AdamW.
+   See CLAUDE.md "Style / approach guidance".
+7. **Then the tokenizer ablation** with the winning loss.
+8. **Evaluation.** Use the existing `gamma_eval` harness with the
+   prefilter-once-slice-many path — same conventions as the
+   overfit-sweep band-resolved NMSE, just on the full sub_2
+   pretrain holdout.
+
+Server agent should NOT:
+
+- Re-tile the segment indices. The parquets are committed and
+  reproducible from `scripts/build_segment_indices.py` if needed.
+- Re-run the laptop overfit sweep. It's done; results are in
+  `results/overfit_runs/`.
+- Modify anything outside the gamma-recon repo (BrainTreebank data,
+  BaRISTA reference repo).
 
 ## Pre-computed segment indices (sub_2)
 

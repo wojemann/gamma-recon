@@ -223,3 +223,6 @@ __marimo__/
 !**/outputs/**/*.png
 **/checkpoints/**
 **/processed/**
+
+# Claude Code local settings
+.claude/

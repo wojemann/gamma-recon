@@ -66,13 +66,18 @@ def _load_model(ckpt_path: Path, segments: torch.Tensor, region_ids: torch.Tenso
 _EVAL_MASK_SEED = 12345
 
 
-def _sample_eval_mask(B: int, C: int, k: int) -> torch.Tensor:
-    """Deterministic eval mask: same seed across all configs for fair comparison."""
+def _sample_eval_region_mask(B: int, region_ids: torch.Tensor, k_regions: int) -> torch.Tensor:
+    """Deterministic eval region-mask: same seed across all configs for fair comparison."""
+    C = region_ids.shape[0]
+    unique = torch.unique(region_ids)
+    n_unique = unique.numel()
     g = torch.Generator().manual_seed(_EVAL_MASK_SEED)
     mask = torch.zeros(B, C, dtype=torch.bool)
     for b in range(B):
-        idx = torch.randperm(C, generator=g)[:k]
-        mask[b, idx] = True
+        perm = torch.randperm(n_unique, generator=g)[:k_regions]
+        chosen = unique[perm]
+        in_chosen = (region_ids.unsqueeze(0) == chosen.unsqueeze(1)).any(dim=0)
+        mask[b] = in_chosen
     return mask
 
 
@@ -85,19 +90,21 @@ def _eval_run(run_dir: Path, segments: torch.Tensor, region_ids: torch.Tensor, f
         summary = json.load(f)
     blob = torch.load(ckpt, map_location="cpu", weights_only=False)
     cfg_dict = blob["config"]
-    mask_k = int(cfg_dict.get("mask_n_channels") or 0)
+    mask_k = int(cfg_dict.get("mask_n_regions") or 0)
     model = _load_model(ckpt, segments, region_ids)
 
     B, C, T = segments.shape
     if mask_k > 0:
-        mask = _sample_eval_mask(B, C, mask_k)
+        mask = _sample_eval_region_mask(B, region_ids, mask_k)
         with torch.no_grad():
             recon = model(segments, region_ids, mask_channels=mask)
-        # Score on masked channels only — variable rows per batch element.
-        # Pack into pseudo-(segments, channels) layout: (B, k, T).
+        # Score on masked channels only. Region-mask uses same regions
+        # for every batch element (same region_ids), so each row has the
+        # same number of masked channels — pack as (B, n_masked_C, T).
         sel = mask  # bool (B, C)
-        true_packed = segments[sel].view(B, mask_k, T)
-        pred_packed = recon[sel].view(B, mask_k, T)
+        n_masked_c = int(mask[0].sum().item())
+        true_packed = segments[sel].view(B, n_masked_c, T)
+        pred_packed = recon[sel].view(B, n_masked_c, T)
     else:
         with torch.no_grad():
             recon = model(segments, region_ids)
@@ -112,7 +119,7 @@ def _eval_run(run_dir: Path, segments: torch.Tensor, region_ids: torch.Tensor, f
         "run": run_dir.name,
         "final_loss": summary["final_loss"],
         "initial_loss": summary["initial_loss"],
-        "mask_n_channels": mask_k,
+        "mask_n_regions": mask_k,
         **{k: v for k, v in metrics.items() if k.startswith("nmse_")},
         "log_spec_dist_gamma_mean": metrics.get("log_spec_dist_gamma_mean"),
     }

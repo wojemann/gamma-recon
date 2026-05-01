@@ -99,7 +99,7 @@ def main() -> None:
         if not run_dir.is_dir() or not (run_dir / "model.pt").exists():
             continue
         blob = torch.load(run_dir / "model.pt", map_location="cpu", weights_only=False)
-        mask_k = int((blob.get("config") or {}).get("mask_n_channels") or 0)
+        mask_k = int((blob.get("config") or {}).get("mask_n_regions") or 0)
         model, model_type, loss_name, tok_name = _load_model(
             run_dir / "model.pt", segments, region_ids
         )
@@ -107,11 +107,15 @@ def main() -> None:
         masked_row = None
         if mask_k > 0:
             # Same eval seed as run_band_eval — single fixed mask for plotting.
+            unique = torch.unique(region_ids)
+            n_unique = unique.numel()
             g = torch.Generator().manual_seed(12345)
             mask = torch.zeros(B, C, dtype=torch.bool)
             for b in range(B):
-                idx = torch.randperm(C, generator=g)[:mask_k]
-                mask[b, idx] = True
+                perm = torch.randperm(n_unique, generator=g)[:mask_k]
+                chosen = unique[perm]
+                in_chosen = (region_ids.unsqueeze(0) == chosen.unsqueeze(1)).any(dim=0)
+                mask[b] = in_chosen
             masked_row = mask[seg_idx].numpy()
             with torch.no_grad():
                 recon = model(segments, region_ids, mask_channels=mask)
@@ -124,7 +128,8 @@ def main() -> None:
         out_path = run_dir / "reconstruction.png"
         title = f"{loss_name} + {label}  (segment {seg_idx})"
         if mask_k > 0:
-            title += f"  | mask {mask_k}/{C} channels"
+            n_masked_c = int(mask[seg_idx].sum().item())
+            title += f"  | mask {mask_k} regions ({n_masked_c}/{C} ch)"
         _plot(true_seg, pred_seg, fs, title=title, out_path=out_path,
               masked_channels=masked_row)
         print(f"wrote {out_path}")

@@ -23,6 +23,7 @@ import torch
 from gamma_encoder.models.full_model import GammaEncoderConfig, GammaEncoderModel
 from gamma_encoder.models.linear_ar import LinearVARModel
 from gamma_encoder.tokenizers.linear import LinearTokenizer
+from gamma_encoder.training.overfit import _sample_region_mask
 
 
 def _build_transformer(C: int, T: int = 1024, patch: int = 256):
@@ -123,6 +124,37 @@ def test_transformer_unmasked_channels_still_drive_output():
         y_pert = model(x_pert, region_ids, mask_channels=mask)
     delta = (y_base - y_pert).abs().max().item()
     assert delta > 1e-3, f"unmasked channel had no effect: max |Δ|={delta}"
+
+
+def test_region_mask_groups_channels_by_region():
+    """Channels sharing a region must be masked together (or not at all).
+
+    Sampling 1 of 3 regions from [0,0,1,1,2,2] must yield exactly 2
+    masked channels per row, and they must be the pair from the same region.
+    """
+    region_ids = torch.tensor([0, 0, 1, 1, 2, 2])
+    g = torch.Generator().manual_seed(0)
+    mask = _sample_region_mask(B=8, region_ids=region_ids, k_regions=1,
+                               generator=g, device="cpu")
+    assert mask.shape == (8, 6)
+    for b in range(8):
+        m = mask[b]
+        # exactly one full region's worth of channels masked
+        assert m.sum().item() == 2
+        # the two masked channels must share a region
+        masked_regions = region_ids[m].tolist()
+        assert masked_regions[0] == masked_regions[1]
+
+
+def test_region_mask_rejects_too_many_regions():
+    region_ids = torch.tensor([0, 1, 2])
+    g = torch.Generator().manual_seed(0)
+    try:
+        _sample_region_mask(B=1, region_ids=region_ids, k_regions=3,
+                            generator=g, device="cpu")
+    except ValueError:
+        return
+    raise AssertionError("expected ValueError when k_regions >= n_unique")
 
 
 def test_linear_var_can_learn_to_predict_masked_from_neighbors():

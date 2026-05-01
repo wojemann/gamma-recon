@@ -39,8 +39,10 @@ def _matrix_sqrt_psd(m: torch.Tensor, eps: float = 1e-6) -> torch.Tensor:
     eye = torch.eye(d, device=m.device, dtype=m.dtype)
     sym = 0.5 * (m + m.transpose(-1, -2)) + eps * eye
     evals, evecs = torch.linalg.eigh(sym)
-    evals = evals.clamp_min(0.0)
-    return evecs @ torch.diag_embed(evals.sqrt()) @ evecs.transpose(-1, -2)
+    # Same eps floor before sqrt: gradient of sqrt at 0 is +inf and
+    # eigh on a low-rank matrix returns near-zero evals.
+    evals = (evals.clamp_min(0.0) + 1e-12).sqrt()
+    return evecs @ torch.diag_embed(evals) @ evecs.transpose(-1, -2)
 
 
 def _bures_wasserstein_full(
@@ -84,8 +86,12 @@ def _bures_wasserstein_diag(pred: torch.Tensor, target: torch.Tensor) -> torch.T
     mu_t = t.mean(dim=1)
     var_p = p.var(dim=1, unbiased=False)
     var_t = t.var(dim=1, unbiased=False)
-    sd_p = var_p.clamp_min(0.0).sqrt()
-    sd_t = var_t.clamp_min(0.0).sqrt()
+    # Add an eps floor before sqrt: d/dx sqrt(x) at x=0 is +inf, which
+    # NaN's the backward pass when pred has zero variance (e.g. masked
+    # LinearVAR at init). 1e-12 is well below any realistic z-scored
+    # variance and shifts the loss negligibly elsewhere.
+    sd_p = (var_p + 1e-12).sqrt()
+    sd_t = (var_t + 1e-12).sqrt()
     return ((mu_p - mu_t) ** 2 + (sd_p - sd_t) ** 2).sum()
 
 

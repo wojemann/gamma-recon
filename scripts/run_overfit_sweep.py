@@ -109,7 +109,7 @@ def _run_one(
     out_root: Path,
     steps: int,
     lr: float,
-    mask_n_channels: int,
+    mask_n_regions: int,
     model_type: str = "transformer",
 ) -> Path:
     label = tokenizer_name if model_type == "transformer" else model_type
@@ -117,7 +117,7 @@ def _run_one(
     if (run_dir / "summary.json").exists():
         print(f"[skip] {run_dir.name} already has summary.json")
         return run_dir
-    print(f"\n=== {loss_name} + {label} (mask {mask_n_channels} ch) ===")
+    print(f"\n=== {loss_name} + {label} (mask {mask_n_regions} regions) ===")
     rep = run_overfit(
         batch_path=batch_path,
         tokenizer_name=tokenizer_name,
@@ -125,7 +125,7 @@ def _run_one(
         model_type=model_type,
         steps=steps,
         lr=lr,
-        mask_n_channels=mask_n_channels,
+        mask_n_regions=mask_n_regions,
         out_dir=run_dir,
         device="cpu",
         log_every=max(1, steps // 20),
@@ -156,9 +156,10 @@ def main() -> None:
         help="which axis of the sweep to run",
     )
     p.add_argument(
-        "--mask-n-channels", type=int, default=4,
-        help="number of channels to mask per segment per step (channel-mask "
-             "pretraining). 0 = full reconstruction (legacy)."
+        "--mask-n-regions", type=int, default=None,
+        help="number of distinct regions to mask per segment per step. "
+             "Defaults to floor(n_unique_regions / 3). 0 = full "
+             "reconstruction (legacy)."
     )
     p.add_argument(
         "--loss-axis-tokenizer", default="linear",
@@ -166,6 +167,13 @@ def main() -> None:
     )
     args = p.parse_args()
     args.out_root.mkdir(parents=True, exist_ok=True)
+
+    if args.mask_n_regions is None:
+        import torch  # local import; pyproject already deps on torch
+        payload = torch.load(args.batch, map_location="cpu", weights_only=False)
+        n_unique = int(torch.unique(payload["region_ids"]).numel())
+        args.mask_n_regions = n_unique // 3
+        print(f"[mask] n_unique_regions={n_unique}  mask_n_regions={args.mask_n_regions}")
 
     completed: list[Tuple[str, str, Path]] = []  # (loss, tokenizer, run_dir)
 
@@ -178,7 +186,7 @@ def main() -> None:
                 out_root=args.out_root,
                 steps=args.steps,
                 lr=args.lr,
-                mask_n_channels=args.mask_n_channels,
+                mask_n_regions=args.mask_n_regions,
             )
             completed.append((loss, args.loss_axis_tokenizer, run_dir))
 
@@ -194,7 +202,7 @@ def main() -> None:
                 out_root=args.out_root,
                 steps=args.steps,
                 lr=args.lr,
-                mask_n_channels=args.mask_n_channels,
+                mask_n_regions=args.mask_n_regions,
             )
             completed.append(("mse", tok, run_dir))
 
@@ -207,7 +215,7 @@ def main() -> None:
                 out_root=args.out_root,
                 steps=args.steps,
                 lr=args.lr,
-                mask_n_channels=args.mask_n_channels,
+                mask_n_regions=args.mask_n_regions,
                 model_type="linear_ar",
             )
             completed.append((loss, "linear_ar", run_dir))
@@ -247,7 +255,7 @@ def main() -> None:
             _plot_axis_comparison(
                 loss_runs,
                 f"Loss-axis sweep (tokenizer={args.loss_axis_tokenizer}, "
-                f"{args.steps} steps, mask={args.mask_n_channels})",
+                f"{args.steps} steps, mask={args.mask_n_regions} regions)",
                 args.out_root / "comparison_loss_axis.png",
             )
             print(f"wrote {args.out_root / 'comparison_loss_axis.png'}")

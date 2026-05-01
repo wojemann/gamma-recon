@@ -130,17 +130,37 @@ def _default_logger(out_dir: Optional[Path], log_every: int) -> MetricsLogger:
     return MultiLogger(backends) if len(backends) > 1 else backends[0]
 
 
-def _sample_channel_mask(
-    B: int, C: int, k: int, generator: torch.Generator, device: str
+def _sample_region_mask(
+    B: int,
+    region_ids: torch.Tensor,
+    k_regions: int,
+    generator: torch.Generator,
+    device: str,
 ) -> torch.Tensor:
-    """Random per-segment mask: pick k of C channels per batch element.
+    """Random per-segment region mask.
 
-    Returns (B, C) bool tensor with exactly k True entries per row.
+    Picks ``k_regions`` distinct region IDs per batch element and masks
+    every channel whose region is in that set. With one channel per
+    region (current cached batch), this reduces to channel masking; with
+    multiple channels per region (real data) it masks whole regions at a
+    time, which is what the encoder needs to learn to infer.
+
+    Returns ``(B, C)`` bool with True at every channel in a masked region.
     """
+    C = region_ids.shape[0]
+    unique = torch.unique(region_ids)
+    n_unique = unique.numel()
+    if k_regions >= n_unique:
+        raise ValueError(
+            f"k_regions={k_regions} must be < n_unique_regions={n_unique}"
+        )
     mask = torch.zeros(B, C, dtype=torch.bool)
     for b in range(B):
-        idx = torch.randperm(C, generator=generator)[:k]
-        mask[b, idx] = True
+        perm = torch.randperm(n_unique, generator=generator)[:k_regions]
+        chosen = unique[perm]
+        # channel is masked iff its region is in `chosen`
+        in_chosen = (region_ids.unsqueeze(0) == chosen.unsqueeze(1)).any(dim=0)
+        mask[b] = in_chosen
     return mask.to(device)
 
 
@@ -159,7 +179,7 @@ def run_overfit(
     n_layers: int = 6,
     n_heads: int = 2,
     ar_order: int = 3,
-    mask_n_channels: int = 0,
+    mask_n_regions: int = 0,
     out_dir: Optional[Path] = None,
     logger: Optional[MetricsLogger] = None,
 ) -> OverfitReport:
@@ -217,7 +237,7 @@ def run_overfit(
         "batch_shape": list(segments.shape),
         "fs": fs,
         "n_params": n_params,
-        "mask_n_channels": mask_n_channels,
+        "mask_n_regions": mask_n_regions,
     }
     logger.log_config(run_config)
 
@@ -226,14 +246,12 @@ def run_overfit(
     t0 = time.time()
     init_loss: Optional[float] = None
     min_loss = float("inf")
-    masking = mask_n_channels > 0
-    if masking and mask_n_channels >= C:
-        raise ValueError(f"mask_n_channels={mask_n_channels} must be < C={C}")
+    masking = mask_n_regions > 0
     mask_gen = torch.Generator().manual_seed(seed + 1)
     try:
         for step in range(1, steps + 1):
             if masking:
-                mask = _sample_channel_mask(B, C, mask_n_channels, mask_gen, device)
+                mask = _sample_region_mask(B, region_ids, mask_n_regions, mask_gen, device)
                 recon = model(segments, region_ids, mask_channels=mask)
                 # Loss only on the masked channels' waveforms — variable
                 # rows per batch element, so flatten via boolean indexing.

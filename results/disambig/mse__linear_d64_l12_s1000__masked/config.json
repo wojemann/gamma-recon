@@ -1,0 +1,23 @@
+{
+  "model_type": "transformer",
+  "ar_order": null,
+  "tokenizer": "linear",
+  "loss": "mse",
+  "steps": 1000,
+  "lr": 0.001,
+  "weight_decay": 0.0,
+  "seed": 0,
+  "device": "cpu",
+  "d_model": 64,
+  "n_layers": 12,
+  "n_heads": 4,
+  "patch_samples": 512,
+  "batch_shape": [
+    16,
+    8,
+    6144
+  ],
+  "fs": 2048.0,
+  "n_params": 670080,
+  "mask_n_regions": 2
+}

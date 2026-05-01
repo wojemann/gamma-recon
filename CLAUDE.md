@@ -583,6 +583,146 @@ Everything beyond #4 (sweep harness, faithful BaRISTA stack, masked
 reconstruction, streaming loader, Subject 2 full-session pretraining)
 is server-side work and shouldn't be attempted on the M5.
 
+## Pre-computed segment indices (sub_2)
+
+Lookup tables of `(start_sample, end_sample)` ranges into the BrainTreebank
+h5 files for sub_2 trials 000–006. **No neural data is copied** — these are
+just timestamps + labels + metadata so the training/finetuning loops can
+load 3-s windows by indexing the h5 directly.
+
+Generator: `scripts/build_segment_indices.py` (path-profile aware,
+`--profile local|server`). Idempotent and seeded; re-running produces
+byte-identical parquets.
+
+Output layout (committed to the repo):
+
+```
+segment_indices/
+├── manifest.json                          # per-trial counts, seeds, sanity checks
+└── sub_02/
+    ├── trial000__pretrain.parquet
+    ├── trial000__sentence_onset.parquet
+    ├── trial000__speech_nonspeech.parquet
+    ├── trial000__volume.parquet
+    ├── trial000__optical_flow.parquet
+    └── ... (5 files × 7 trials = 35 parquets)
+```
+
+Two evaluation schemes covered:
+
+1. **`pretrain`** — non-overlapping 3-s windows tiling the trigger-bounded
+   valid window (between the timing CSV's `beginning` and `end` markers).
+   Random 80/10/10 train/valid/test split with seed 42. The same tiling
+   doubles as the **channel-reconstruction** candidate pool — no separate
+   file for that task.
+2. **`main`** (BaRISTA Appendix A) for four binary tasks:
+   - `sentence_onset` — positives = words with `is_onset==1`
+   - `speech_nonspeech` — positives = every word
+   - `volume` — top vs. bottom quartile of `rms`, middle two quartiles dropped
+   - `optical_flow` — top vs. bottom quartile of `max_global_magnitude`
+     (this column choice is a guess; easy to swap)
+
+   Positives are 3-s windows centered on the relevant word/onset.
+   Negatives are 3-s windows containing **no** word interval (BaRISTA's
+   stricter rule, not PopT's center-1-s rule). Greedy chronological
+   non-overlap (keep first); kept positives win the cross-prune against
+   negatives. Class-balanced (subsample larger class, seed 42), then
+   80/10/10 random split (seed 42).
+
+The chronological / Appendix-K "extended" scheme is **not** generated —
+deliberately dropped to simplify the experimental paradigm.
+
+### Row schema (every parquet)
+
+```
+session_id        str    "sub_02_trial_000"
+subject_id        int    2
+trial_id          int    0..6
+movie             str    transcript subdir name (e.g., "venom")
+task              str    pretrain | sentence_onset | speech_nonspeech | volume | optical_flow
+session_role      str    pretrain | downstream_val | downstream_test
+                         (CLAUDE.md mapping: trials 000-004=pretrain, 005=val, 006=test)
+split             str    train | valid | test
+split_seed        int    42
+start_sample      int64  inclusive sample index into the h5
+end_sample        int64  exclusive; (end - start) == 6144 always
+label             int8   0/1 for binary tasks; -1 for pretrain rows
+center_sample     int64  word/onset sample for centered positives, else -1
+source_word_idx   int64  row index into the movie's features.csv, else -1
+notes             str    e.g., "no_speech_negative", "volume_top_quartile_pos"
+```
+
+### Time → sample mapping
+
+Word times in `transcripts/<movie>/features.csv` are movie-relative
+seconds. Mapping to h5 sample indices uses the per-trial trigger table
+(`subject_timings/sub_2_trial<NNN>_timings.csv`):
+
+```python
+sample_idx = round(np.interp(word_time_s,
+                             triggers["movie_time"],
+                             triggers["index"]))
+```
+
+Triggers are dense (~12 Hz) and `diff` is non-constant, so per-trigger
+interpolation absorbs mild clock drift without sub-sample bias. The
+"valid window" for pretrain tiling is the `[beginning.index, end.index)`
+range from the same CSV.
+
+### Sanity-check vs. BaRISTA Table 6 (sub_2 row)
+
+Comparing against trial006 (the downstream-test session per CLAUDE.md's
+session-role mapping):
+
+| Task | Expected (train/val/test) | Got | Delta |
+|------|---------------------------|-----|-------|
+| sentence_onset | 1036 / 129 / 129 | 1040 / 130 / 130 | +0.4% |
+| speech_nonspeech | 1470 / 183 / 183 | 1498 / 187 / 187 | +1.9% |
+| channel_recon (= trial006 pretrain tiling) | 3385 / 422 / 422 | 2954 / 369 / 370 | **−12.7%** |
+
+The labeled-task counts match within ~2%. The channel_recon shortfall is
+explained by valid-window choice: `4229 × 3 s = 3.52 hr` (Table 5
+trial007 row exactly), so BaRISTA appears to tile the full h5
+(~3.52 hr) rather than the trigger-bounded valid window (~3.08 hr we
+use). Easy knob to flip in `pretrain_tiling()` if exact replication of
+that table cell becomes important.
+
+### How to use at training/finetuning time
+
+```python
+import h5py, pandas as pd
+
+df = pd.read_parquet("segment_indices/sub_02/trial006__sentence_onset.parquet")
+train = df[df["split"] == "train"]
+with h5py.File(f"sub_2_trial{int(train.iloc[0].trial_id):03d}.h5") as f:
+    for _, row in train.iterrows():
+        seg = f["data/electrode_42"][row.start_sample : row.end_sample]  # length 6144
+        label = row.label
+```
+
+`split` and `session_role` are independent: `session_role` tags the
+trial's intended role per CLAUDE.md (pretrain / downstream_val /
+downstream_test), `split` is the per-task 80/10/10 random fold.
+Filter however the experiment requires — every trial gets indices for
+every task, the trainer decides which to use.
+
+### Notes / caveats
+
+- **Sentence onsets <3 s apart get pruned by greedy non-overlap.** Rare
+  in practice; it's the same code path as `speech_nonspeech` so it
+  isn't a special case.
+- **Negative pool = pretrain tiling filtered to no-speech windows** — so
+  negative starts are always multiples of 6144 from `valid_window[0]`,
+  while positive starts can be anywhere. That asymmetry is intentional
+  (negatives have to fit the no-speech rule cheaply).
+- **The optical-flow column (`max_global_magnitude`) is a guess.** The
+  BTB / PopT papers reference an "optical flow" feature without naming
+  the exact column; `max_mean_magnitude` and `max_median_magnitude`
+  are alternatives. Swap in `_build_main_task` if needed.
+- **Reproducibility.** All seeds are constants at the top of the script:
+  `SEED_PRETRAIN = SEED_MAIN = 42`. Re-running with the same data
+  produces byte-identical parquets.
+
 ## Evaluation harness conventions
 
 - Signals are arrays of shape `(n_channels, n_samples)` or, when batched,

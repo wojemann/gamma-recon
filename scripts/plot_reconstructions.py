@@ -53,8 +53,10 @@ def _load_model(ckpt_path: Path, segments: torch.Tensor, region_ids: torch.Tenso
 
 
 def _plot(true_seg: np.ndarray, pred_seg: np.ndarray, fs: float,
-          title: str, out_path: Path) -> None:
-    """true_seg, pred_seg: (C, T)."""
+          title: str, out_path: Path,
+          masked_channels: np.ndarray | None = None) -> None:
+    """true_seg, pred_seg: (C, T). masked_channels: (C,) bool of which
+    channels were hidden from the encoder (highlighted in title)."""
     C, T = true_seg.shape
     t = np.arange(T) / fs
     fig, axes = plt.subplots(C, 1, figsize=(10, 1.4 * C), sharex=True)
@@ -65,7 +67,10 @@ def _plot(true_seg: np.ndarray, pred_seg: np.ndarray, fs: float,
         ax.plot(t, true_seg[c], lw=0.8, color="black", label="true" if c == 0 else None)
         ax.plot(t, pred_seg[c], lw=0.8, color="tab:red", alpha=0.85,
                 label="pred" if c == 0 else None)
-        ax.set_ylabel(f"ch {c}", fontsize=8)
+        suffix = "  [MASKED]" if masked_channels is not None and bool(masked_channels[c]) else ""
+        ax.set_ylabel(f"ch {c}{suffix}", fontsize=8)
+        if masked_channels is not None and bool(masked_channels[c]):
+            ax.set_facecolor((1.0, 0.95, 0.85))  # cream tint on masked rows
         ax.tick_params(axis="both", labelsize=7)
         ax.grid(True, alpha=0.2)
     axes[-1].set_xlabel("time (s)")
@@ -93,20 +98,35 @@ def main() -> None:
     for run_dir in sorted(args.runs_root.iterdir()):
         if not run_dir.is_dir() or not (run_dir / "model.pt").exists():
             continue
+        blob = torch.load(run_dir / "model.pt", map_location="cpu", weights_only=False)
+        mask_k = int((blob.get("config") or {}).get("mask_n_channels") or 0)
         model, model_type, loss_name, tok_name = _load_model(
             run_dir / "model.pt", segments, region_ids
         )
-        with torch.no_grad():
-            recon = model(segments, region_ids)
+        B, C, T = segments.shape
+        masked_row = None
+        if mask_k > 0:
+            # Same eval seed as run_band_eval — single fixed mask for plotting.
+            g = torch.Generator().manual_seed(12345)
+            mask = torch.zeros(B, C, dtype=torch.bool)
+            for b in range(B):
+                idx = torch.randperm(C, generator=g)[:mask_k]
+                mask[b, idx] = True
+            masked_row = mask[seg_idx].numpy()
+            with torch.no_grad():
+                recon = model(segments, region_ids, mask_channels=mask)
+        else:
+            with torch.no_grad():
+                recon = model(segments, region_ids)
         true_seg = segments[seg_idx].numpy()
         pred_seg = recon[seg_idx].numpy()
         label = tok_name if model_type == "transformer" else model_type
         out_path = run_dir / "reconstruction.png"
-        _plot(
-            true_seg, pred_seg, fs,
-            title=f"{loss_name} + {label}  (segment {seg_idx})",
-            out_path=out_path,
-        )
+        title = f"{loss_name} + {label}  (segment {seg_idx})"
+        if mask_k > 0:
+            title += f"  | mask {mask_k}/{C} channels"
+        _plot(true_seg, pred_seg, fs, title=title, out_path=out_path,
+              masked_channels=masked_row)
         print(f"wrote {out_path}")
         written += 1
     print(f"\n{written} plots written")

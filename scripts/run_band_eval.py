@@ -63,6 +63,19 @@ def _load_model(ckpt_path: Path, segments: torch.Tensor, region_ids: torch.Tenso
     return model
 
 
+_EVAL_MASK_SEED = 12345
+
+
+def _sample_eval_mask(B: int, C: int, k: int) -> torch.Tensor:
+    """Deterministic eval mask: same seed across all configs for fair comparison."""
+    g = torch.Generator().manual_seed(_EVAL_MASK_SEED)
+    mask = torch.zeros(B, C, dtype=torch.bool)
+    for b in range(B):
+        idx = torch.randperm(C, generator=g)[:k]
+        mask[b, idx] = True
+    return mask
+
+
 def _eval_run(run_dir: Path, segments: torch.Tensor, region_ids: torch.Tensor, fs: float) -> dict:
     ckpt = run_dir / "model.pt"
     summary_path = run_dir / "summary.json"
@@ -70,11 +83,28 @@ def _eval_run(run_dir: Path, segments: torch.Tensor, region_ids: torch.Tensor, f
         return {}
     with open(summary_path) as f:
         summary = json.load(f)
+    blob = torch.load(ckpt, map_location="cpu", weights_only=False)
+    cfg_dict = blob["config"]
+    mask_k = int(cfg_dict.get("mask_n_channels") or 0)
     model = _load_model(ckpt, segments, region_ids)
-    with torch.no_grad():
-        recon = model(segments, region_ids)
-    true_np = segments.numpy()           # (B, C, T)
-    pred_np = recon.numpy()
+
+    B, C, T = segments.shape
+    if mask_k > 0:
+        mask = _sample_eval_mask(B, C, mask_k)
+        with torch.no_grad():
+            recon = model(segments, region_ids, mask_channels=mask)
+        # Score on masked channels only — variable rows per batch element.
+        # Pack into pseudo-(segments, channels) layout: (B, k, T).
+        sel = mask  # bool (B, C)
+        true_packed = segments[sel].view(B, mask_k, T)
+        pred_packed = recon[sel].view(B, mask_k, T)
+    else:
+        with torch.no_grad():
+            recon = model(segments, region_ids)
+        true_packed = segments
+        pred_packed = recon
+    true_np = true_packed.numpy()
+    pred_np = pred_packed.numpy()
     evaluator = ReconstructionEvaluator(fs=fs)
     evaluator.accumulate(true_np, pred_np)
     metrics = evaluator.summarize()
@@ -82,6 +112,7 @@ def _eval_run(run_dir: Path, segments: torch.Tensor, region_ids: torch.Tensor, f
         "run": run_dir.name,
         "final_loss": summary["final_loss"],
         "initial_loss": summary["initial_loss"],
+        "mask_n_channels": mask_k,
         **{k: v for k, v in metrics.items() if k.startswith("nmse_")},
         "log_spec_dist_gamma_mean": metrics.get("log_spec_dist_gamma_mean"),
     }
@@ -161,11 +192,16 @@ def main() -> None:
         "wavelet_packet", "welch_psd",
     ]
 
-    loss_df = df[df["model"] == "dilated_cnn"].copy()
+    # Loss-axis: pick whichever transformer tokenizer has the most loss
+    # rows (since the loss-axis sweep can pick any tokenizer; default is
+    # "linear" post-channel-mask).
+    tok_counts = df[df["model"].isin(TOKENIZERS)].groupby("model").size()
+    loss_axis_tok = tok_counts.idxmax() if len(tok_counts) else "linear"
+    loss_df = df[df["model"] == loss_axis_tok].copy()
     loss_df["row"] = loss_df["loss"]
     _heatmap(
         loss_df, "row", LOSSES,
-        "Loss-axis NMSE per band (tokenizer=dilated_cnn)",
+        f"Loss-axis NMSE per band (tokenizer={loss_axis_tok})",
         args.runs_root / "band_eval_loss_axis.png",
     )
 
@@ -181,7 +217,7 @@ def main() -> None:
     ar_df["row"] = ar_df["loss"]
     _heatmap(
         ar_df, "row", LOSSES,
-        "Linear-AR NMSE per band (per-channel AR(3), 4 params)",
+        "Linear-VAR NMSE per band (MVAR(3), C^2 p + C params)",
         args.runs_root / "band_eval_linear_ar_axis.png",
     )
 

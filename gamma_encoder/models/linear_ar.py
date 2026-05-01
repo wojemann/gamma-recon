@@ -56,7 +56,10 @@ class LinearVARModel(nn.Module):
             self.conv.bias.zero_()
 
     def forward(
-        self, signal: torch.Tensor, region_ids: torch.Tensor | None = None
+        self,
+        signal: torch.Tensor,
+        region_ids: torch.Tensor | None = None,
+        mask_channels: torch.Tensor | None = None,
     ) -> torch.Tensor:
         if signal.dim() != 3:
             raise ValueError(f"expected (B, C, T), got {tuple(signal.shape)}")
@@ -64,7 +67,15 @@ class LinearVARModel(nn.Module):
             raise ValueError(
                 f"expected {self.num_channels} channels, got {signal.shape[1]}"
             )
-        _, _, T = signal.shape
+        B, C, T = signal.shape
+        if mask_channels is not None:
+            if mask_channels.shape != (B, C):
+                raise ValueError(
+                    f"mask_channels shape {tuple(mask_channels.shape)} "
+                    f"!= expected (B, C) = ({B}, {C})"
+                )
+            keep = (~mask_channels.bool()).to(signal.dtype).to(signal.device)
+            signal = signal * keep[:, :, None]
         padded = F.pad(signal, (self.order, 0))     # (B, C, T+order)
         out = self.conv(padded)                     # (B, C, T+1)
         return out[..., :T]

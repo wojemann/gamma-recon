@@ -18,5 +18,6 @@
     6144
   ],
   "fs": 2048.0,
-  "n_params": 111584
+  "n_params": 111616,
+  "mask_n_channels": 4
 }

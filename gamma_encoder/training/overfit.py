@@ -130,6 +130,20 @@ def _default_logger(out_dir: Optional[Path], log_every: int) -> MetricsLogger:
     return MultiLogger(backends) if len(backends) > 1 else backends[0]
 
 
+def _sample_channel_mask(
+    B: int, C: int, k: int, generator: torch.Generator, device: str
+) -> torch.Tensor:
+    """Random per-segment mask: pick k of C channels per batch element.
+
+    Returns (B, C) bool tensor with exactly k True entries per row.
+    """
+    mask = torch.zeros(B, C, dtype=torch.bool)
+    for b in range(B):
+        idx = torch.randperm(C, generator=generator)[:k]
+        mask[b, idx] = True
+    return mask.to(device)
+
+
 def run_overfit(
     batch_path: Path,
     tokenizer_name: str = "dilated_cnn",
@@ -145,6 +159,7 @@ def run_overfit(
     n_layers: int = 6,
     n_heads: int = 2,
     ar_order: int = 3,
+    mask_n_channels: int = 0,
     out_dir: Optional[Path] = None,
     logger: Optional[MetricsLogger] = None,
 ) -> OverfitReport:
@@ -202,6 +217,7 @@ def run_overfit(
         "batch_shape": list(segments.shape),
         "fs": fs,
         "n_params": n_params,
+        "mask_n_channels": mask_n_channels,
     }
     logger.log_config(run_config)
 
@@ -210,10 +226,24 @@ def run_overfit(
     t0 = time.time()
     init_loss: Optional[float] = None
     min_loss = float("inf")
+    masking = mask_n_channels > 0
+    if masking and mask_n_channels >= C:
+        raise ValueError(f"mask_n_channels={mask_n_channels} must be < C={C}")
+    mask_gen = torch.Generator().manual_seed(seed + 1)
     try:
         for step in range(1, steps + 1):
-            recon = model(segments, region_ids)
-            loss = loss_fn(recon, segments)
+            if masking:
+                mask = _sample_channel_mask(B, C, mask_n_channels, mask_gen, device)
+                recon = model(segments, region_ids, mask_channels=mask)
+                # Loss only on the masked channels' waveforms — variable
+                # rows per batch element, so flatten via boolean indexing.
+                pred_m = recon[mask]            # (B*k, T)
+                true_m = segments[mask]         # (B*k, T)
+                # Add a leading "channel" axis so loss_fn's (B, C, T) contract holds.
+                loss = loss_fn(pred_m.unsqueeze(1), true_m.unsqueeze(1))
+            else:
+                recon = model(segments, region_ids)
+                loss = loss_fn(recon, segments)
             optim.zero_grad(set_to_none=True)
             loss.backward()
             optim.step()

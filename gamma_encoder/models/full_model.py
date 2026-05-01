@@ -4,6 +4,8 @@ Forward pass:
     signal (B, C, T)
         -> patchify     (B, C, n_patches, L)
         -> tokenizer    (B, C, n_patches, d_model)
+        -> [optional channel-mask: replace masked channels' tokens with
+            a learned MASK embedding before spatial + encoder]
         -> + spatial    (B, C, n_patches, d_model)
         -> reshape      (B, C * n_patches, d_model)
         -> transformer  (B, C * n_patches, d_model)
@@ -11,7 +13,9 @@ Forward pass:
         -> decoder      (B, C, n_patches, L)
         -> unpatchify   (B, C, T)
 
-Returns the reconstructed waveform.
+Returns the reconstructed waveform for all C channels. When channel
+masking is active, the caller should slice the loss to the masked
+channels only — that's the supervision signal.
 """
 
 from __future__ import annotations
@@ -71,12 +75,38 @@ class GammaEncoderModel(nn.Module):
         else:
             raise ValueError(f"unknown encoder_kind: {cfg.encoder_kind!r}")
         self.decoder = LinearPatchDecoder(cfg.d_model, cfg.patch_samples)
+        # Learned MASK token used to overwrite masked channels' tokens before
+        # the spatial embedding + encoder. Init small so it doesn't dominate.
+        self.mask_token = nn.Parameter(torch.zeros(cfg.d_model))
+        nn.init.normal_(self.mask_token, std=0.02)
 
-    def forward(self, signal: torch.Tensor, region_ids: torch.Tensor) -> torch.Tensor:
-        """signal: (B, C, T); region_ids: (B, C) or (C,) -> reconstructed (B, C, T)."""
+    def forward(
+        self,
+        signal: torch.Tensor,
+        region_ids: torch.Tensor,
+        mask_channels: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        """signal: (B, C, T); region_ids: (B, C) or (C,) -> reconstructed (B, C, T).
+
+        ``mask_channels``: optional bool tensor of shape ``(B, C)`` (True =
+        masked). For masked channels, the tokenizer output is replaced with
+        the learned MASK embedding before adding the spatial encoding. The
+        encoder still receives the spatial embedding at masked positions, so
+        it knows *which* channel to reconstruct from cross-channel context.
+        """
         B, C, T = signal.shape
         patches = patchify(signal, self.cfg.patch_samples)            # (B, C, n, L)
         tokens = self.tokenizer(patches)                              # (B, C, n, d)
+        if mask_channels is not None:
+            if mask_channels.shape != (B, C):
+                raise ValueError(
+                    f"mask_channels shape {tuple(mask_channels.shape)} "
+                    f"!= expected (B, C) = ({B}, {C})"
+                )
+            mask_b = mask_channels.to(tokens.device).bool()           # (B, C)
+            mask_b = mask_b[:, :, None, None]                         # (B, C, 1, 1)
+            mask_emb = self.mask_token.view(1, 1, 1, -1)              # (1,1,1,d)
+            tokens = torch.where(mask_b, mask_emb.expand_as(tokens), tokens)
         tokens = tokens + self.spatial(region_ids)                    # broadcast
         n = tokens.size(2)
         seq = tokens.reshape(B, C * n, self.cfg.d_model)

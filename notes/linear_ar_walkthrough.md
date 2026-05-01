@@ -89,6 +89,22 @@ sliced off so the recon shape matches the input.
   `A1, A2, A3`. After 400 Adam steps the learned conv kernel matches
   ground truth within 0.07.
 
+## Channel-masked pretraining
+
+As of the channel-masking pivot, training masks `k=4` of 8 channels
+per segment per step. The MVAR forward zero-fills masked channels'
+inputs before the conv, so the prediction for any output channel is
+purely a function of the unmasked channels' lagged values plus the
+bias. The harness slices the loss to the masked channels' outputs
+only — that's the supervision signal.
+
+What this probes specifically: **the off-diagonal entries of `W`**.
+Identity-shift init has zero off-diagonals, so the masked-channel
+prediction at step 0 is just the bias (≈ 0). Driving the masked
+loss down requires learning non-zero `W[masked_c, unmasked_c', k]`
+that capture cross-channel temporal coupling. So masked-channel MVAR
+is a clean probe of "did the model learn cross-channel structure."
+
 ## How it gets trained
 
 Same harness as every other config in the sweep:

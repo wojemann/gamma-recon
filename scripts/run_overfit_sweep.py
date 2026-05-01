@@ -109,6 +109,7 @@ def _run_one(
     out_root: Path,
     steps: int,
     lr: float,
+    mask_n_channels: int,
     model_type: str = "transformer",
 ) -> Path:
     label = tokenizer_name if model_type == "transformer" else model_type
@@ -116,7 +117,7 @@ def _run_one(
     if (run_dir / "summary.json").exists():
         print(f"[skip] {run_dir.name} already has summary.json")
         return run_dir
-    print(f"\n=== {loss_name} + {label} ===")
+    print(f"\n=== {loss_name} + {label} (mask {mask_n_channels} ch) ===")
     rep = run_overfit(
         batch_path=batch_path,
         tokenizer_name=tokenizer_name,
@@ -124,6 +125,7 @@ def _run_one(
         model_type=model_type,
         steps=steps,
         lr=lr,
+        mask_n_channels=mask_n_channels,
         out_dir=run_dir,
         device="cpu",
         log_every=max(1, steps // 20),
@@ -153,6 +155,15 @@ def main() -> None:
         default="all",
         help="which axis of the sweep to run",
     )
+    p.add_argument(
+        "--mask-n-channels", type=int, default=4,
+        help="number of channels to mask per segment per step (channel-mask "
+             "pretraining). 0 = full reconstruction (legacy)."
+    )
+    p.add_argument(
+        "--loss-axis-tokenizer", default="linear",
+        help="tokenizer used for the loss-axis sweep (default: linear — fast)"
+    )
     args = p.parse_args()
     args.out_root.mkdir(parents=True, exist_ok=True)
 
@@ -162,18 +173,19 @@ def main() -> None:
         for loss in LOSSES:
             run_dir = _run_one(
                 loss_name=loss,
-                tokenizer_name="dilated_cnn",
+                tokenizer_name=args.loss_axis_tokenizer,
                 batch_path=args.batch,
                 out_root=args.out_root,
                 steps=args.steps,
                 lr=args.lr,
+                mask_n_channels=args.mask_n_channels,
             )
-            completed.append((loss, "dilated_cnn", run_dir))
+            completed.append((loss, args.loss_axis_tokenizer, run_dir))
 
     if args.axis in ("all", "tokenizer"):
         for tok in TOKENIZERS:
-            if tok == "dilated_cnn" and args.axis == "all":
-                # already covered as mse + dilated_cnn in the loss axis
+            if tok == args.loss_axis_tokenizer and args.axis == "all":
+                # already covered as mse + <loss_axis_tokenizer> in the loss axis
                 continue
             run_dir = _run_one(
                 loss_name="mse",
@@ -182,6 +194,7 @@ def main() -> None:
                 out_root=args.out_root,
                 steps=args.steps,
                 lr=args.lr,
+                mask_n_channels=args.mask_n_channels,
             )
             completed.append(("mse", tok, run_dir))
 
@@ -194,6 +207,7 @@ def main() -> None:
                 out_root=args.out_root,
                 steps=args.steps,
                 lr=args.lr,
+                mask_n_channels=args.mask_n_channels,
                 model_type="linear_ar",
             )
             completed.append((loss, "linear_ar", run_dir))
@@ -225,13 +239,15 @@ def main() -> None:
 
     if args.axis in ("all", "loss"):
         loss_runs = [
-            (loss, args.out_root / f"{loss}__dilated_cnn") for loss in LOSSES
+            (loss, args.out_root / f"{loss}__{args.loss_axis_tokenizer}")
+            for loss in LOSSES
         ]
         loss_runs = [(l, p) for l, p in loss_runs if (p / "metrics.jsonl").exists()]
         if loss_runs:
             _plot_axis_comparison(
                 loss_runs,
-                f"Loss-axis sweep (tokenizer=dilated_cnn, {args.steps} steps)",
+                f"Loss-axis sweep (tokenizer={args.loss_axis_tokenizer}, "
+                f"{args.steps} steps, mask={args.mask_n_channels})",
                 args.out_root / "comparison_loss_axis.png",
             )
             print(f"wrote {args.out_root / 'comparison_loss_axis.png'}")
